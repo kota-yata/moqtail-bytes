@@ -5,7 +5,7 @@ import {
   deserializeVarIntFromStream,
   deserializeVarIntPossiblyBigIntFromStream,
   serializeVarIntPossiblyBigInt,
-} from "../index";
+} from "../varint";
 
 describe("serializeVarInt", () => {
   it("should serialize a number in the 1-byte range correctly", () => {
