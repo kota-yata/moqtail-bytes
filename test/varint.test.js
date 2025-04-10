@@ -1,5 +1,5 @@
 // Import in commonjs style because ESM is not supported in Jest yet
-const { serializeVarInt, deserializeVarIntFromBuffer, deserializeVarIntFromStream } = require("../dist/index");
+const { serializeVarInt, deserializeVarIntFromBuffer, deserializeVarIntFromStream, serializeVarIntPossiblyBigInt } = require("../dist/index");
 
 describe("serializeVarInt", () => {
   it("should serialize a number in the 1-byte range correctly", () => {
@@ -17,14 +17,36 @@ describe("serializeVarInt", () => {
     expect(result).toEqual(new Uint8Array([0xBF, 0xFF, 0xFF, 0xFF]));
   });
 
+  it("should throw an error for numbers out of range", () => {
+    expect(() => serializeVarInt(-1)).toThrow(RangeError);
+    expect(() => serializeVarInt(1073741823 + 1)).toThrow(RangeError);
+  });
+});
+
+describe("serializeVarIntPossibleBigInt", () => {
+  it("should serialize a number in the 1-byte range correctly", () => {
+    const result = serializeVarIntPossiblyBigInt(63);
+    expect(result).toEqual(new Uint8Array([0x3F]));
+  });
+
+  it("should serialize a number in the 2-byte range correctly", () => {
+    const result = serializeVarIntPossiblyBigInt(16383);
+    expect(result).toEqual(new Uint8Array([0x7F, 0xFF]));
+  });
+
+  it("should serialize a number in the 4-byte range correctly", () => {
+    const result = serializeVarIntPossiblyBigInt(1073741823);
+    expect(result).toEqual(new Uint8Array([0xBF, 0xFF, 0xFF, 0xFF]));
+  });
+
   it("should serialize a number in the 8-byte range correctly", () => {
-    const result = serializeVarInt(2n ** 62n - 1n);
+    const result = serializeVarIntPossiblyBigInt(2n ** 62n - 1n);
     expect(result).toEqual(new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]));
   });
 
   it("should throw an error for numbers out of range", () => {
-    expect(() => serializeVarInt(-1)).toThrow(RangeError);
-    expect(() => serializeVarInt(2 ** 62)).toThrow(RangeError);
+    expect(() => serializeVarIntPossiblyBigInt(-1)).toThrow(RangeError);
+    expect(() => serializeVarIntPossiblyBigInt(2n ** 62n)).toThrow(RangeError);
   });
 });
 

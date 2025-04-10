@@ -1,32 +1,49 @@
+const MAX_1BYTE = 63; // 2^6 - 1
+const MAX_2BYTES = 16383; // 2^14 - 1
+const MAX_4BYTES = 1073741823; // 2^30 - 1
+const MAX_8BYTES = 2n ** 62n - 1n; // 2^62 - 1
+
 // serialize number to varint in an uint8 array
-export const serializeVarInt = (value: number | bigint): Uint8Array => {
+export const serializeVarInt = (value: number): Uint8Array => {
+  if (value < 0) {
+    throw new RangeError("Value must be non-negative");
+  }
+  if (value > MAX_4BYTES) {
+    throw new RangeError("Cannot serialize value greater than 2^30 - 1");
+  }
+
+  if (value <= MAX_1BYTE) {
+    // 1-byte encoding (prefix: 00)
+    return new Uint8Array([Number(value)]);
+  } else if (value <= MAX_2BYTES) {
+    // 2-byte encoding (prefix: 01)
+    const buffer = new Uint8Array(2);
+    buffer[0] = 0x40 | (value >> 8) & 0x3F;
+    buffer[1] = value & 0xFF;
+    return buffer;
+  } else {
+    // 4-byte encoding (prefix: 10)
+    const buffer = new Uint8Array(4);
+    buffer[0] = 0x80 | value >> 24 & 0x3F;
+    buffer[1] = (value >> 16) & 0xFF;
+    buffer[2] = (value >> 8) & 0xFF;
+    buffer[3] = value & 0xFF;
+    return buffer;
+  }
+};
+
+export const serializeVarIntPossiblyBigInt = (value: number | bigint): Uint8Array => {
   if (typeof value === 'number') value = BigInt(value);
   if (value < 0n) {
     throw new RangeError("Value must be non-negative.");
   }
-  if (value >= 2n ** 62n) {
+  if (value > MAX_8BYTES) {
     throw new RangeError("Value exceeds the maximum allowed varint size (2^62 - 1).");
   }
 
-  if (value <= 63n) {
-    // 1-byte encoding (prefix: 00)
-    return new Uint8Array([Number(value)]);
-  } else if (value <= 16383n) {
-    // 2-byte encoding (prefix: 01)
-    const buffer = new Uint8Array(2);
-    buffer[0] = 0x40 | Number((value >> 8n) & 0x3Fn);
-    buffer[1] = Number(value & 0xFFn);
-    return buffer;
-  } else if (value <= 1073741823n) {
-    // 4-byte encoding (prefix: 10)
-    const buffer = new Uint8Array(4);
-    buffer[0] = 0x80 | Number((value >> 24n) & 0x3Fn);
-    buffer[1] = Number((value >> 16n) & 0xFFn);
-    buffer[2] = Number((value >> 8n) & 0xFFn);
-    buffer[3] = Number(value & 0xFFn);
-    return buffer;
+  if (value <= MAX_4BYTES) {
+    return serializeVarInt(Number(value));
   } else {
-    // 8-byte encoding (prefix: 11)
     const buffer = new Uint8Array(8);
     buffer[0] = 0xC0 | Number((value >> 56n) & 0x3Fn);
     buffer[1] = Number((value >> 48n) & 0xFFn);
@@ -38,7 +55,7 @@ export const serializeVarInt = (value: number | bigint): Uint8Array => {
     buffer[7] = Number(value & 0xFFn);
     return buffer;
   }
-};
+}
 
 // deserialize varint in an uint8 array to number
 export const deserializeVarIntFromBuffer = (data: Uint8Array): number | bigint => {
