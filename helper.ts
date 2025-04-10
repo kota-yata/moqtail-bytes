@@ -14,3 +14,20 @@ export const concat = (...arrays: Uint8Array[]): Uint8Array => {
 
   return result;
 }
+
+export const readBytesFromStream = async (stream: ReadableStream, length: number): Promise<Uint8Array> => {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytesRead = 0;
+
+  while (totalBytesRead < length) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(value);
+    totalBytesRead += value.length;
+  }
+
+  return concat(...chunks).slice(0, length);
+}
