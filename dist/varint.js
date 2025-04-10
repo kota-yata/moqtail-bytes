@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deserializeVarIntFromStream = exports.deserializeVarIntFromBuffer = exports.serializeVarIntPossiblyBigInt = exports.serializeVarInt = void 0;
+exports.deserializeVarIntPossiblyBigIntFromStream = exports.deserializeVarIntFromStream = exports.deserializeVarIntPossiblyBigIntFromBuffer = exports.deserializeVarIntFromBuffer = exports.serializeVarIntPossiblyBigInt = exports.serializeVarInt = void 0;
 const MAX_1BYTE = 63; // 2^6 - 1
 const MAX_2BYTES = 16383; // 2^14 - 1
 const MAX_4BYTES = 1073741823; // 2^30 - 1
 const MAX_8BYTES = 2n ** 62n - 1n; // 2^62 - 1
-// serialize number to varint in an uint8 array
+// Serialize number to varint in an uint8 array
 const serializeVarInt = (value) => {
     if (value < 0) {
         throw new RangeError("Value must be non-negative");
@@ -35,6 +35,7 @@ const serializeVarInt = (value) => {
     }
 };
 exports.serializeVarInt = serializeVarInt;
+// Serialize number or BigInt to varint in an uint8 array
 const serializeVarIntPossiblyBigInt = (value) => {
     if (typeof value === 'number')
         value = BigInt(value);
@@ -61,7 +62,7 @@ const serializeVarIntPossiblyBigInt = (value) => {
     }
 };
 exports.serializeVarIntPossiblyBigInt = serializeVarIntPossiblyBigInt;
-// deserialize varint in an uint8 array to number
+// Deserialize varint in an uint8 array to number
 const deserializeVarIntFromBuffer = (data) => {
     if (!(data instanceof Uint8Array)) {
         throw new TypeError("Input must be a Uint8Array");
@@ -82,20 +83,32 @@ const deserializeVarIntFromBuffer = (data) => {
                 (data[1] << 16) |
                 (data[2] << 8) |
                 data[3]);
-        case 3: // Prefix: '11' -> Eight bytes
-            if (data.length < 8)
-                throw new Error("Insufficient data for decoding");
-            let result = BigInt(firstByte) & 0x3fn;
-            for (let i = 1; i < data.length; i++) {
-                result = (result << 8n) | BigInt(data[i]);
-            }
-            return result;
         default:
             throw new Error("Invalid varint prefix");
     }
 };
 exports.deserializeVarIntFromBuffer = deserializeVarIntFromBuffer;
-// deserialize varint in a readable stream to number
+// Deserialize varint in a Uint8Array to a number or BigInt
+const deserializeVarIntPossiblyBigIntFromBuffer = (data) => {
+    if (!(data instanceof Uint8Array)) {
+        throw new TypeError("Input must be a Uint8Array");
+    }
+    const firstByte = data[0];
+    const prefix = firstByte >> 6;
+    if (prefix < 3)
+        return (0, exports.deserializeVarIntFromBuffer)(data);
+    // Handle 8-byte varint (prefix: '11')
+    if (data.length < 8) {
+        throw new Error("Insufficient data for decoding");
+    }
+    let result = BigInt(firstByte & 0x3F);
+    for (let i = 1; i < 8; i++) {
+        result = (result << 8n) | BigInt(data[i]);
+    }
+    return result;
+};
+exports.deserializeVarIntPossiblyBigIntFromBuffer = deserializeVarIntPossiblyBigIntFromBuffer;
+// Deserialize varint in a readable stream to number
 const deserializeVarIntFromStream = async (stream) => {
     const reader = stream.getReader();
     let resultBuffer = [];
@@ -113,3 +126,21 @@ const deserializeVarIntFromStream = async (stream) => {
     return (0, exports.deserializeVarIntFromBuffer)(new Uint8Array(resultBuffer));
 };
 exports.deserializeVarIntFromStream = deserializeVarIntFromStream;
+// Deserialize varint in a readable stream to number or BigInt
+const deserializeVarIntPossiblyBigIntFromStream = async (stream) => {
+    const reader = stream.getReader();
+    let resultBuffer = [];
+    let done, chunk;
+    try {
+        while (!done && resultBuffer.length < 8) {
+            ({ done, value: chunk } = await reader.read());
+            if (chunk)
+                resultBuffer.push(...chunk);
+        }
+    }
+    finally {
+        reader.releaseLock();
+    }
+    return (0, exports.deserializeVarIntPossiblyBigIntFromBuffer)(new Uint8Array(resultBuffer));
+};
+exports.deserializeVarIntPossiblyBigIntFromStream = deserializeVarIntPossiblyBigIntFromStream;

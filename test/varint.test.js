@@ -1,5 +1,12 @@
 // Import in commonjs style because ESM is not supported in Jest yet
-const { serializeVarInt, deserializeVarIntFromBuffer, deserializeVarIntFromStream, serializeVarIntPossiblyBigInt } = require("../dist/index");
+const {
+  serializeVarInt,
+  deserializeVarIntFromBuffer,
+  deserializeVarIntPossiblyBigIntFromBuffer,
+  deserializeVarIntFromStream,
+  deserializeVarIntPossiblyBigIntFromStream,
+  serializeVarIntPossiblyBigInt,
+} = require("../dist/index");
 
 describe("serializeVarInt", () => {
   it("should serialize a number in the 1-byte range correctly", () => {
@@ -66,11 +73,6 @@ describe("deserializeVarIntFromBuffer", () => {
     expect(result).toBe(1073741823);
   });
 
-  it("should deserialize an 8-byte varint correctly", () => {
-    const result = deserializeVarIntFromBuffer(new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]));
-    expect(result).toBe(2n ** 62n - 1n);
-  });
-
   it("should throw an error for insufficient data", () => {
     expect(() => deserializeVarIntFromBuffer(new Uint8Array([0x7F]))).toThrow(Error);
     expect(() => deserializeVarIntFromBuffer(new Uint8Array([0xBF, 0xFF]))).toThrow(Error);
@@ -78,6 +80,32 @@ describe("deserializeVarIntFromBuffer", () => {
 
   it("should throw a TypeError for invalid input", () => {
     expect(() => deserializeVarIntFromBuffer("invalid")).toThrow(TypeError);
+  });
+});
+
+describe("deserializeVarIntPossiblyBigIntFromBuffer", () => {
+  it("should deserialize a 1-byte varint correctly", () => {
+    const result = deserializeVarIntPossiblyBigIntFromBuffer(new Uint8Array([0x3F]));
+    expect(result).toBe(63);
+  });
+
+  it("should deserialize a 2-byte varint correctly", () => {
+    const result = deserializeVarIntPossiblyBigIntFromBuffer(new Uint8Array([0x7F, 0xFF]));
+    expect(result).toBe(16383);
+  });
+
+  it("should deserialize a 4-byte varint correctly", () => {
+    const result = deserializeVarIntPossiblyBigIntFromBuffer(new Uint8Array([0xBF, 0xFF, 0xFF, 0xFF]));
+    expect(result).toBe(1073741823);
+  });
+
+  it("should deserialize an 8-byte varint correctly", () => {
+    const result = deserializeVarIntPossiblyBigIntFromBuffer(new Uint8Array([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]));
+    expect(result).toBe(2n ** 62n - 1n);
+  });
+
+  it("should throw an error for insufficient data", () => {
+    expect(() => deserializeVarIntPossiblyBigIntFromBuffer(new Uint8Array([0xFF]))).toThrow(Error);
   });
 });
 
@@ -104,6 +132,30 @@ describe("deserializeVarIntFromStream", () => {
 
     await expect(deserializeVarIntFromStream(stream)).rejects.toThrow(Error);
   });
+});
+
+describe("deserializeVarIntPossiblyBigIntFromStream", () => {
+  it("should deserialize a varint from a readable stream correctly", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array([0x7F, 0xFF]));
+        controller.close();
+      },
+    });
+
+    expect(await deserializeVarIntPossiblyBigIntFromStream(stream)).toBe(16383);
+  });
+
+  it("should handle streams with insufficient data", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array([0xBF]));
+        controller.close();
+      },
+    });
+
+    await expect(deserializeVarIntPossiblyBigIntFromStream(stream)).rejects.toThrow(Error);
+  });
 
   it("should handle streams with exactly 8 bytes of data", async () => {
     const stream = new ReadableStream({
@@ -113,7 +165,6 @@ describe("deserializeVarIntFromStream", () => {
       },
     });
 
-    const result = await deserializeVarIntFromStream(stream);
-    expect(result).toBe(2n ** 62n - 1n);
+    expect(await deserializeVarIntPossiblyBigIntFromStream(stream)).toBe(2n ** 62n - 1n);
   });
 });

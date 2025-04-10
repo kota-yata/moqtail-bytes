@@ -3,7 +3,7 @@ const MAX_2BYTES = 16383; // 2^14 - 1
 const MAX_4BYTES = 1073741823; // 2^30 - 1
 const MAX_8BYTES = 2n ** 62n - 1n; // 2^62 - 1
 
-// serialize number to varint in an uint8 array
+// Serialize number to varint in an uint8 array
 export const serializeVarInt = (value: number): Uint8Array => {
   if (value < 0) {
     throw new RangeError("Value must be non-negative");
@@ -32,6 +32,7 @@ export const serializeVarInt = (value: number): Uint8Array => {
   }
 };
 
+// Serialize number or BigInt to varint in an uint8 array
 export const serializeVarIntPossiblyBigInt = (value: number | bigint): Uint8Array => {
   if (typeof value === 'number') value = BigInt(value);
   if (value < 0n) {
@@ -57,8 +58,8 @@ export const serializeVarIntPossiblyBigInt = (value: number | bigint): Uint8Arra
   }
 }
 
-// deserialize varint in an uint8 array to number
-export const deserializeVarIntFromBuffer = (data: Uint8Array): number | bigint => {
+// Deserialize varint in an uint8 array to number
+export const deserializeVarIntFromBuffer = (data: Uint8Array): number => {
   if (!(data instanceof Uint8Array)) {
     throw new TypeError("Input must be a Uint8Array");
   }
@@ -83,33 +84,66 @@ export const deserializeVarIntFromBuffer = (data: Uint8Array): number | bigint =
         data[3]
       );
 
-    case 3: // Prefix: '11' -> Eight bytes
-      if (data.length < 8) throw new Error("Insufficient data for decoding");
-      let result = BigInt(firstByte) & 0x3Fn;
-      for (let i = 1; i < data.length; i++) {
-        result = (result << 8n) | BigInt(data[i]);
-      }
-      return result;
-
     default:
       throw new Error("Invalid varint prefix");
   }
+};
+
+// Deserialize varint in a Uint8Array to a number or BigInt
+export const deserializeVarIntPossiblyBigIntFromBuffer = (data: Uint8Array): number | bigint => {
+  if (!(data instanceof Uint8Array)) {
+    throw new TypeError("Input must be a Uint8Array");
+  }
+
+  const firstByte = data[0];
+  const prefix = firstByte >> 6;
+
+  if (prefix < 3) return deserializeVarIntFromBuffer(data);
+
+  // Handle 8-byte varint (prefix: '11')
+  if (data.length < 8) {
+    throw new Error("Insufficient data for decoding");
+  }
+
+  let result = BigInt(firstByte & 0x3F);
+  for (let i = 1; i < 8; i++) {
+    result = (result << 8n) | BigInt(data[i]);
+  }
+  return result;
+};
+
+// Deserialize varint in a readable stream to number
+export const deserializeVarIntFromStream = async (stream: ReadableStream): Promise<number> => {
+  const reader = stream.getReader();
+  let resultBuffer = [];
+  let done, chunk;
+
+  try {
+    while (!done && resultBuffer.length < 8) {
+      ({ done, value: chunk } = await reader.read());
+      if (chunk) resultBuffer.push(...chunk);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return deserializeVarIntFromBuffer(new Uint8Array(resultBuffer));
 }
 
-// deserialize varint in a readable stream to number
-export const deserializeVarIntFromStream = async (stream: ReadableStream): Promise<number | bigint> => {
+// Deserialize varint in a readable stream to number or BigInt
+export const deserializeVarIntPossiblyBigIntFromStream = async (stream: ReadableStream): Promise<number | bigint> => {
   const reader = stream.getReader();
-    let resultBuffer = [];
-    let done, chunk;
+  let resultBuffer = [];
+  let done, chunk;
 
-    try {
-      while (!done && resultBuffer.length < 8) {
-        ({ done, value: chunk } = await reader.read());
-        if (chunk) resultBuffer.push(...chunk);
-      }
-    } finally {
-      reader.releaseLock();
+  try {
+    while (!done && resultBuffer.length < 8) {
+      ({ done, value: chunk } = await reader.read());
+      if (chunk) resultBuffer.push(...chunk);
     }
+  } finally {
+    reader.releaseLock();
+  }
 
-    return deserializeVarIntFromBuffer(new Uint8Array(resultBuffer));
+  return deserializeVarIntPossiblyBigIntFromBuffer(new Uint8Array(resultBuffer));
 }
