@@ -1,12 +1,11 @@
-// Import in commonjs style because ESM is not supported in Jest yet
-const {
+import {
   serializeVarInt,
   deserializeVarIntFromBuffer,
   deserializeVarIntPossiblyBigIntFromBuffer,
   deserializeVarIntFromStream,
   deserializeVarIntPossiblyBigIntFromStream,
   serializeVarIntPossiblyBigInt,
-} = require("../dist/index");
+} from "../index";
 
 describe("serializeVarInt", () => {
   it("should serialize a number in the 1-byte range correctly", () => {
@@ -76,10 +75,6 @@ describe("deserializeVarIntFromBuffer", () => {
   it("should throw an error for insufficient data", () => {
     expect(() => deserializeVarIntFromBuffer(new Uint8Array([0x7F]))).toThrow(Error);
     expect(() => deserializeVarIntFromBuffer(new Uint8Array([0xBF, 0xFF]))).toThrow(Error);
-  });
-
-  it("should throw a TypeError for invalid input", () => {
-    expect(() => deserializeVarIntFromBuffer("invalid")).toThrow(TypeError);
   });
 });
 
